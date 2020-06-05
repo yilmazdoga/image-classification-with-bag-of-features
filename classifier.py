@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import MeanShift, estimate_bandwidth
 from sklearn.neighbors import NearestNeighbors
 from sklearn import svm
+from sklearn.datasets import make_blobs
 
 
 class DataLoader:
@@ -150,10 +151,12 @@ class DictionaryComputationUnit:
             for i in self.descriptors:
                 for j in i:
                     all_descriptors.append(j)
+            all_descriptors = np.asarray(all_descriptors)
 
-            bandwidth = estimate_bandwidth(all_descriptors, quantile=0.2, n_samples=100)
-            ms = MeanShift(bandwidth=bandwidth).fit(all_descriptors)
-            print(ms.cluster_centers_)
+            bandwidth = estimate_bandwidth(all_descriptors, quantile=0.005, n_samples=10000)
+            ms = MeanShift(bandwidth=bandwidth, max_iter=100)
+            ms.fit(all_descriptors)
+            print(len(ms.cluster_centers_))
             return ms.cluster_centers_
 
         elif method == 'kmeans50':
