@@ -6,7 +6,7 @@ import natsort
 import sklearn as sk
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import MeanShift
+from sklearn.cluster import MeanShift, estimate_bandwidth
 from sklearn.neighbors import NearestNeighbors
 from sklearn import svm
 
@@ -75,7 +75,7 @@ class FeatureExtractor:
                 keypoint_diameter = 8
 
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-                corners = cv2.goodFeaturesToTrack(gray, 1000, 0.0002, 6)
+                corners = cv2.goodFeaturesToTrack(gray, 1000, 0.002, 8)
                 corners = np.int0(corners)
 
                 keypoints = []
@@ -89,8 +89,8 @@ class FeatureExtractor:
             keypoints_grid_0 = []
             for image in self.images:
                 image_height, image_width, channels = image.shape
-                patch_height_0 = image_height // 24
-                patch_width_0 = image_width // 24
+                patch_height_0 = image_height // 8
+                patch_width_0 = image_width // 8
                 keypoint_diameter = 8
 
                 keypoints = []
@@ -104,8 +104,8 @@ class FeatureExtractor:
             keypoints_grid_1 = []
             for image in self.images:
                 image_height, image_width, channels = image.shape
-                patch_height_1 = image_height // 32
-                patch_width_1 = image_width // 32
+                patch_height_1 = image_height // 12
+                patch_width_1 = image_width // 12
                 keypoint_diameter = 8
 
                 keypoints = []
@@ -144,15 +144,16 @@ class DictionaryComputationUnit:
     def __init__(self, descriptors):
         self.descriptors = descriptors
 
-    def compute(self, method='mean_shift'):
+    def compute(self, method='kmeans50'):
         if method == 'mean_shift':
             all_descriptors = []
             for i in self.descriptors:
                 for j in i:
                     all_descriptors.append(j)
-            ms = MeanShift()
-            ms.fit(all_descriptors)
 
+            bandwidth = estimate_bandwidth(all_descriptors, quantile=0.2, n_samples=100)
+            ms = MeanShift(bandwidth=bandwidth).fit(all_descriptors)
+            print(ms.cluster_centers_)
             return ms.cluster_centers_
 
         elif method == 'kmeans50':
@@ -198,17 +199,16 @@ class DictionaryComputationUnit:
 
 
 class HistogramCalculator:
-    def __init__(self, descriptors, cluster_centers):
-        self.descriptors = descriptors
+    def __init__(self, cluster_centers):
         self.cluster_centers = cluster_centers
+        self.nearest_neighbors = NearestNeighbors(algorithm='auto')
+        self.nearest_neighbors.fit(self.cluster_centers)
 
-    def calculate_histograms(self):
+    def calculate_histograms(self, descriptors):
         descriptor_histograms = []
-        for i, descriptor in enumerate(self.descriptors):
+        for i, descriptor in enumerate(descriptors):
             histogram_bins = [0 for i in range(len(self.cluster_centers))]
-            nearest_neighbors = NearestNeighbors(algorithm='auto')
-            nearest_neighbors.fit(self.cluster_centers)
-            cluster_indexes = nearest_neighbors.kneighbors(descriptor, 1, return_distance=False)
+            cluster_indexes = self.nearest_neighbors.kneighbors(descriptor, 1, return_distance=False)
             for j, desc in enumerate(descriptor):
                 histogram_bins[cluster_indexes[j][0]] += 1
             descriptor_histograms.append(histogram_bins)
@@ -263,45 +263,50 @@ class ImageViewer:
 
 
 if __name__ == "__main__":
-    dataloader = DataLoader(path='Dataset/')
-    image_viewer = ImageViewer()
 
+    dataset_path = 'Dataset/'
+    feature_extractor_method = 'grid0'
+    clustering_method = 'mean_shift'
+    show_images = False
+
+    if show_images:
+        image_viewer = ImageViewer()
+
+    dataloader = DataLoader(path=dataset_path)
     training_images, training_labels = dataloader.get_training_set(shuffle=True)
     validation_images, validation_labels = dataloader.get_validation_set(shuffle=True)
-    image_viewer.add_to_plot(training_images[0], training_labels[0])
+
+    if show_images:
+        image_viewer.add_to_plot(training_images[0], training_labels[0])
 
     feature_extractor = FeatureExtractor(training_images)
-    training_keypoints = feature_extractor.get_keypoints(method='GFTT')
-    keypoint_image = training_images[0].copy()
-    cv2.drawKeypoints(training_images[0], training_keypoints[0], keypoint_image)
-    image_viewer.add_to_plot(keypoint_image, 'Keypoints GFTT ' + training_labels[0])
+    training_keypoints = feature_extractor.get_keypoints(method=feature_extractor_method)
+
+    if show_images:
+        keypoint_image = training_images[0].copy()
+        cv2.drawKeypoints(training_images[0], training_keypoints[0], keypoint_image)
+        image_viewer.add_to_plot(keypoint_image, 'Keypoints GFTT ' + training_labels[0])
 
     feature_descriptor = FeatureDescriptor(training_images, training_keypoints)
     training_descriptors = feature_descriptor.get_SIFT_descriptors()
 
     dictionary_comp_unit = DictionaryComputationUnit(training_descriptors)
-    descriptor_cluster_centers = dictionary_comp_unit.compute(method='kmeans500')
+    descriptor_cluster_centers = dictionary_comp_unit.compute(method=clustering_method)
 
-    histogram_calculator = HistogramCalculator(training_descriptors, descriptor_cluster_centers)
-    training_descriptor_histograms = histogram_calculator.calculate_histograms()
+    histogram_calculator = HistogramCalculator(descriptor_cluster_centers)
+    training_descriptor_histograms = histogram_calculator.calculate_histograms(training_descriptors)
 
     classifier = Classifier(training_descriptor_histograms, training_labels)
 
     # ---------------------------------------------------------------------------------------------
 
     feature_extractor_validation = FeatureExtractor(validation_images)
-    validation_keypoints = feature_extractor_validation.get_keypoints(method='GFTT')
+    validation_keypoints = feature_extractor_validation.get_keypoints(method=feature_extractor_method)
 
     validation_feature_descriptor = FeatureDescriptor(validation_images, validation_keypoints)
     validation_descriptors = validation_feature_descriptor.get_SIFT_descriptors()
 
-    validation_dictionary_comp_unit = DictionaryComputationUnit(validation_descriptors)
-    validation_descriptor_cluster_centers = validation_dictionary_comp_unit.compute(method='kmeans500')
-
-    validation_histogram_calculator = HistogramCalculator(validation_descriptors, validation_descriptor_cluster_centers)
-    validation_descriptor_histograms = validation_histogram_calculator.calculate_histograms()
-
-    print(len(validation_descriptor_histograms))
+    validation_descriptor_histograms = histogram_calculator.calculate_histograms(validation_descriptors)
 
     results = classifier.predict(validation_descriptor_histograms)
 
@@ -313,4 +318,5 @@ if __name__ == "__main__":
 
     print("Accuracy: ", accuracy, "%")
 
-    image_viewer.show()
+    if show_images:
+        image_viewer.show()
