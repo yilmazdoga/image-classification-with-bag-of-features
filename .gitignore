@@ -130,6 +130,7 @@ dmypy.json
 
 # other
 .DS_Store
-.idea
 **/.DS_Store
-Dataset/
+.idea
+
+

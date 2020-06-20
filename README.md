@@ -1,1 +1,2 @@
-# image_classification_with_bag_of_features
+# Image Classification with Bag of Features
+
