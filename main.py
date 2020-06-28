@@ -35,7 +35,7 @@ if __name__ == "__main__":
     dataset_path = 'Dataset/'
 
     # Parameters
-    feature_extractor_method = 'grid1'
+    feature_extractor_method = 'GFTT'
     clustering_method = 'kmeans50'
     show_images = True
 
