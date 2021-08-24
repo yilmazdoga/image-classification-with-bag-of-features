@@ -19,6 +19,7 @@ class FeatureExtractor:
                 keypoints = []
                 for corner in corners:
                     x, y = corner[0]
+                    x, y = float(x), float(y)
                     keypoints.append(cv2.KeyPoint(x, y, keypoint_diameter))
                 keypoints_GFTT.append(keypoints)
             return keypoints_GFTT
