@@ -8,7 +8,7 @@ joblib==0.15.1
 matplotlib>=3.2.1
 natsort==7.0.1
 numpy>=1.18.4
-opencv-python==3.4.10.37
+opencv-python==4.2.0.32
 opencv-contrib-python==3.4.11.45
 Pillow==8.3.2
 pyparsing==2.4.7
